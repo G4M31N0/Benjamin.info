@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ET-OS // G4M31N0 — Terminal</title>
+  <meta name="description" content="Interactive ET-OS terminal — Benjamin / G4M31N0." />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #00ff41;
+      --fg-dim: #00cc33;
+      --glow: rgba(0, 255, 65, 0.45);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: "Courier New", Courier, "Lucida Console", monospace;
+      color: var(--fg);
+    }
+    #layer-globe, #layer-matrix {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #layer-globe { z-index: 0; opacity: 0.35; }
+    #layer-matrix { z-index: 1; opacity: 0.55; mix-blend-mode: screen; }
+    #crt-wrap {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      pointer-events: none;
+    }
+    #crt-wrap * { pointer-events: auto; }
+    #terminal {
+      width: min(920px, 96vw);
+      max-height: min(88vh, 720px);
+      border: 1px solid var(--fg);
+      box-shadow:
+        0 0 12px var(--glow),
+        inset 0 0 60px rgba(0, 255, 65, 0.06);
+      background: rgba(10, 10, 10, 0.92);
+      display: flex;
+      flex-direction: column;
+      animation: crt-jitter 0.12s infinite steps(2);
+    }
+    @keyframes crt-jitter {
+      0%, 100% { transform: translate(0, 0); filter: brightness(1); }
+      50% { transform: translate(0.3px, -0.2px); filter: brightness(1.02); }
+    }
+    .term-header {
+      flex-shrink: 0;
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--fg-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--glow);
+      background: rgba(0, 40, 15, 0.35);
+    }
+    .term-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      position: relative;
+    }
+    .term-body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.35) 2px,
+        rgba(0, 0, 0, 0.35) 4px
+      );
+      pointer-events: none;
+      z-index: 2;
+    }
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      text-shadow: 0 0 6px var(--glow), 0 0 14px rgba(0, 255, 65, 0.25);
+      position: relative;
+      z-index: 1;
+    }
+    #output::-webkit-scrollbar { width: 8px; }
+    #output::-webkit-scrollbar-thumb {
+      background: var(--fg-dim);
+      border-radius: 2px;
+    }
+    .line { margin: 0; }
+    .prompt-line {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0 1rem 0.85rem;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+      font-size: 0.85rem;
+      text-shadow: 0 0 6px var(--glow);
+    }
+    .prompt-label { color: var(--fg-dim); flex-shrink: 0; }
+    .input-shell {
+      flex: 1;
+      min-width: 0;
+      position: relative;
+      min-height: 1.25em;
+      align-self: stretch;
+    }
+    .input-stack {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+      font: inherit;
+      text-shadow: 0 0 6px var(--glow);
+    }
+    #cmd-ghost {
+      white-space: pre;
+      color: var(--fg);
+      flex-shrink: 0;
+    }
+    #block-caret {
+      width: 0.62em;
+      height: 1.12em;
+      flex-shrink: 0;
+      background: var(--fg);
+      margin-left: 0;
+      animation: blink 1s step-end infinite;
+      box-shadow: 0 0 8px var(--glow);
+    }
+    #cmd-input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: transparent;
+      font-family: inherit;
+      font-size: inherit;
+      caret-color: transparent;
+      text-shadow: none;
+      padding: 0;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .dim { color: var(--fg-dim); }
+    .warn { color: var(--fg); animation: pulse-warn 1.2s ease-in-out infinite; }
+    @keyframes pulse-warn {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+    .scan-bar {
+      font-family: inherit;
+      letter-spacing: 0.02em;
+    }
+    a.terminal-link {
+      color: var(--fg);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-shadow: 0 0 6px var(--glow);
+    }
+    a.terminal-link:hover { color: var(--fg-dim); }
+    a.terminal-btn {
+      display: inline-block;
+      margin-top: 0.35rem;
+      padding: 0.4rem 0.85rem;
+      border: 1px solid var(--fg);
+      background: rgba(0, 40, 18, 0.55);
+      color: var(--fg);
+      font-family: inherit;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      text-shadow: 0 0 8px var(--glow);
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+    }
+    a.terminal-btn:hover {
+      background: rgba(0, 60, 24, 0.65);
+      color: var(--fg-dim);
+    }
+    details.term-help-toggle {
+      position: fixed;
+      top: 0.85rem;
+      right: 0.85rem;
+      z-index: 20;
+      max-width: min(22rem, calc(100vw - 1.7rem));
+      pointer-events: auto;
+    }
+    details.term-help-toggle summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      padding: 0.5rem 0.95rem;
+      border: 1px solid var(--fg);
+      background: rgba(10, 10, 10, 0.94);
+      color: var(--fg);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--glow);
+      box-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+    }
+    details.term-help-toggle summary::-webkit-details-marker { display: none; }
+    details.term-help-toggle[open] summary {
+      border-bottom-color: var(--fg-dim);
+    }
+    .term-help-body {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--fg);
+      border-top: none;
+      background: rgba(10, 10, 10, 0.96);
+      font-size: 0.76rem;
+      line-height: 1.55;
+      color: var(--fg-dim);
+      max-height: min(52vh, 18rem);
+      overflow-y: auto;
+      box-shadow: inset 0 0 24px rgba(0, 255, 65, 0.05);
+    }
+    .term-help-body ol { margin: 0.35rem 0 0 1.1rem; padding: 0; }
+    .term-help-body li { margin: 0.35rem 0; }
+    .term-help-body kbd {
+      font-family: inherit;
+      font-size: 0.88em;
+      padding: 0.08em 0.32em;
+      border: 1px solid var(--fg-dim);
+      border-radius: 2px;
+      color: var(--fg);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="layer-globe" aria-hidden="true"></canvas>
+  <canvas id="layer-matrix" aria-hidden="true"></canvas>
+
+  <details class="term-help-toggle">
+    <summary>How to use this terminal</summary>
+    <div class="term-help-body">
+      <strong style="color:var(--fg)">Quick start</strong>
+      <ol>
+        <li>Click inside the green terminal window so the blinking cursor accepts typing (you may hear a faint click).</li>
+        <li>Type after <kbd>guest@et-supercluster:~$</kbd>, then press <kbd>Enter</kbd> to run a command.</li>
+        <li>Run <kbd>help</kbd> first — it lists every command (<kbd>contact</kbd>, <kbd>services</kbd>, <kbd>reviews</kbd>, etc.).</li>
+        <li>Use <kbd>clear</kbd> to empty the screen; scroll inside the terminal if there is a lot of output.</li>
+      </ol>
+    </div>
+  </details>
+
+  <div id="crt-wrap">
+    <div id="terminal">
+      <div class="term-header">
+        ET-OS v4.0 // Deep Space 9 // Connection Secure // Operator: G4M31N0 (Benjamin)
+      </div>
+      <div class="term-body">
+        <div id="output"></div>
+        <div class="prompt-line">
+          <span class="prompt-label" id="prompt-text">guest@et-supercluster:~$</span>
+          <div class="input-shell">
+            <div class="input-stack" aria-hidden="true">
+              <span id="cmd-ghost"></span><span id="block-caret"></span>
+            </div>
+            <input id="cmd-input" type="text" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Terminal input" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Short keyclick WAV (embedded base64, no external assets) -->
+  <audio id="click-audio" preload="auto">
+    <source src="data:audio/wav;base64,UklGRvQCAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YdACAAAAAHIFWAhnBxcDbP39+M73Yfp9/8YE0wdEB2YDB/6d+Sr4T/oH/yMETQcZB6gDlv43+on4SPqe/okDyQbnBt4DGv/M+uv4S/pC/vgCRwavBggEk/9b+0/5Vvrx/XECyAVxBigEAADk+7T5avqr/fIBSwUvBj4EYwBm/Bn6hPpv/X0B0gTqBUwEvADh/H36pPo+/REBXQSiBVEECwFV/eH6yvoV/a0A7QNYBU8EUQHC/UP79fr1/FIAgQMNBUYEjgEp/qP7I/vd/AAAGgPBBDgEwwGI/gH8VfvM/Lb/uAJ1BCQE8AHg/lz8ifvC/HP/WwIpBAsEFQIy/7X8v/u+/Df/AwLeA+8DNAJ9/wr99/vA/AL/sQGTA84DTALC/1v9MPzG/NT+ZAFLA6sDXgIAAKn9afzR/Kz+HAEEA4YDawI4APP9o/zg/Ir+2QC/Al8DcgJrADn+3Pzz/G7+mwB8AjYDdQKYAHv+Ff0I/Vf+YwA8AgsDdALAALn+Tf0h/UT+LwD/AeECbwLjAPT+hP07/Tf+AADEAbUCZwIBASr/uf1X/S3+1v+MAYoCXAIaAVz/7f11/Sf+sP9XAV8CTgIwAYv/IP6U/SX+jv8lATQCPQJBAbb/UP60/Sb+b//2AAkCKwJPAd3/fv7U/Sr+Vf/KAOABFwJZAQAAq/71/TD+Pv+hALgBAgJgASAA1f4W/jn+K/97AJAB6wFlAT0A/f42/kP+G/9YAGoB1AFmAVYAI/9X/k/+Dv84AEYBvAFmAW0ARv93/l3+A/8aACMBowFjAYEAZ/+W/mz+/P4AAAEBiwFeAZIAhv+0/nz+9v7o/+IAcgFYAaEAo//S/o3+8/7S/8MAWQFQAa0Avf/v/p/+8v6//6cAQQFGAbcA1v8K/7H+8v6u/4wAKQE8Ab8A7P8l/8P+9P6f/3MAEQExAcQAAAA+/9b++P6S/1wA+gAkAckAEgA=" type="audio/wav" />
+  </audio>
+
+  <script>
+(function () {
+  "use strict";
+
+  const BG = "#0a0a0a";
+  const FG = "#00ff41";
+  const OPERATOR = "G4M31N0";
+  /** Primary Gmail (compose + default mailto). Proton kept as alternate. */
+  const CONTACT_GMAIL = "gambino1876@gmail.com";
+  const CONTACT_PROTON = "g4m31n0@proton.me";
+
+  const MORSE = {
+    A:".-",B:"-...",C:"-.-.",D:"-..",E:".",F:"..-.",G:"--.",H:"....",I:"..",
+    J:".---",K:"-.-",L:".-..",M:"--",N:"-.",O:"---",P:".--.",Q:"--.-",R:".-.",
+    S:"...",T:"-",U:"..-",V:"...-",W:".--",X:"-..-",Y:"-.--",Z:"--..",
+    "1":".----","2":"..---","3":"...--","4":"....-","5":".....","6":"-....",
+    "7":"--...","8":"---..","9":"----.","0":"-----",".":".-.-.-",",": "--..--",
+    "?":"..--..","'":".----.", "!":"-.-.--", "/":"-..-.", "(":"-.--.", ")":"-.--.-",
+    "&":".-...", ":":"---...", ";":"-.-.-.", "=":"-...-", "+":".-.-.", "-":"-....-",
+    "_":"..--.-", "\"":".-..-.", "$":"...-..-", "@":".--.-."
+  };
+
+  function textToMorseDots(text) {
+    const upper = text.toUpperCase().replace(/[^A-Z0-9 .,?'!/()&:;=+\-_"$@]/g, "");
+    const words = upper.trim().split(/\s+/);
+    const parts = [];
+    for (let w = 0; w < words.length; w++) {
+      const letters = [];
+      for (const ch of words[w]) {
+        const code = MORSE[ch];
+        if (code) letters.push(code.replace(/\./g, "·").replace(/-/g, "−"));
+      }
+      parts.push(letters.join(" "));
+    }
+    return parts.join(" / ");
+  }
+
+  const PRIMARY_MORSE = textToMorseDots("We are the future.");
+  const SECONDARY_MORSE = textToMorseDots("A major malfunction has occurred.");
+
+  /* ---------- Globe ---------- */
+  const globeCv = document.getElementById("layer-globe");
+  const gctx = globeCv.getContext("2d");
+  let globeAngle = 0;
+
+  function resizeGlobe() {
+    globeCv.width = window.innerWidth * devicePixelRatio;
+    globeCv.height = window.innerHeight * devicePixelRatio;
+    gctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }
+
+  function project(x, y, z, cx, cy, scale) {
+    const persp = scale / (scale + z);
+    return [cx + x * persp, cy + y * persp];
+  }
+
+  function rotateY(x, y, z, a) {
+    const ca = Math.cos(a), sa = Math.sin(a);
+    return [x * ca + z * sa, y, -x * sa + z * ca];
+  }
+
+  function drawGlobe() {
+    const w = window.innerWidth, h = window.innerHeight;
+    gctx.fillStyle = BG;
+    gctx.fillRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.42;
+    const scale = R * 2.2;
+    gctx.strokeStyle = FG;
+    gctx.lineWidth = 1;
+    gctx.globalAlpha = 0.85;
+
+    const latSteps = 12, lonSteps = 24;
+    for (let li = 1; li < latSteps; li++) {
+      const lat = (Math.PI * li) / latSteps - Math.PI / 2;
+      const y = Math.sin(lat) * R;
+      const rr = Math.cos(lat) * R;
+      gctx.beginPath();
+      let first = true;
+      for (let j = 0; j <= lonSteps; j++) {
+        const lon = (j / lonSteps) * Math.PI * 2;
+        let x = Math.cos(lon) * rr;
+        let z = Math.sin(lon) * rr;
+        [x, , z] = rotateY(x, y, z, globeAngle);
+        const [px, py] = project(x, y, z, cx, cy, scale);
+        if (first) { gctx.moveTo(px, py); first = false; }
+        else gctx.lineTo(px, py);
+      }
+      gctx.stroke();
+    }
+    for (let j = 0; j < lonSteps; j++) {
+      const lon = (j / lonSteps) * Math.PI * 2;
+      gctx.beginPath();
+      let first = true;
+      for (let i = 0; i <= 48; i++) {
+        const t = (i / 48) * Math.PI - Math.PI / 2;
+        let x = Math.cos(t) * Math.cos(lon) * R;
+        let y = Math.sin(t) * R;
+        let z = Math.cos(t) * Math.sin(lon) * R;
+        [x, , z] = rotateY(x, y, z, globeAngle);
+        const [px, py] = project(x, y, z, cx, cy, scale);
+        if (first) { gctx.moveTo(px, py); first = false; }
+        else gctx.lineTo(px, py);
+      }
+      gctx.stroke();
+    }
+    gctx.globalAlpha = 1;
+    globeAngle += 0.003;
+    requestAnimationFrame(drawGlobe);
+  }
+
+  /* ---------- Matrix + Morse ---------- */
+  const matCv = document.getElementById("layer-matrix");
+  const mctx = matCv.getContext("2d");
+  const chars = "01ABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*?/|\\<>[]{}~`";
+  const hexRun = () => "0x" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
+
+  let columns = [];
+  let morseColumns = [];
+
+  function resizeMatrix() {
+    matCv.width = window.innerWidth * devicePixelRatio;
+    matCv.height = window.innerHeight * devicePixelRatio;
+    mctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    const colW = 14;
+    const n = Math.ceil(window.innerWidth / colW) + 2;
+    columns = [];
+    for (let i = 0; i < n; i++) {
+      columns.push({
+        x: i * colW + Math.random() * 4,
+        y: Math.random() * window.innerHeight,
+        speed: 0.4 + Math.random() * 1.8,
+        head: Math.floor(Math.random() * 40),
+        glyphs: []
+      });
+    }
+    morseColumns = [];
+    for (let i = 0; i < n; i++) {
+      if (Math.random() < 0.08) spawnMorseColumn(i * colW);
+    }
+  }
+
+  function spawnMorseColumn(baseX) {
+    const useSecondary = Math.random() < 0.12;
+    const pattern = useSecondary ? SECONDARY_MORSE : PRIMARY_MORSE;
+    const seq = [];
+    for (const ch of pattern) seq.push(ch === " " ? " " : ch);
+    morseColumns.push({
+      x: baseX + Math.random() * 8,
+      y: -Math.random() * 200,
+      speed: 0.55 + Math.random() * 0.9,
+      seq: seq,
+      idx: 0,
+      life: 0
+    });
+  }
+
+  function drawMatrix() {
+    const w = window.innerWidth, h = window.innerHeight;
+    mctx.fillStyle = "rgba(10,10,10,0.12)";
+    mctx.fillRect(0, 0, w, h);
+    mctx.font = "13px Courier New, monospace";
+    mctx.textBaseline = "top";
+
+    for (const c of columns) {
+      const roll = Math.random();
+      let g;
+      if (roll < 0.08) g = hexRun();
+      else if (roll < 0.15) g = (Math.random() < 0.5 ? "·" : "−");
+      else g = chars[Math.floor(Math.random() * chars.length)];
+
+      c.glyphs.push({ g, y: c.y, o: 1 });
+      c.y += c.speed;
+      if (c.y > h + 80) {
+        c.y = -20 - Math.random() * 100;
+        c.speed = 0.4 + Math.random() * 1.8;
+      }
+      while (c.glyphs.length > c.head) c.glyphs.shift();
+
+      for (let i = 0; i < c.glyphs.length; i++) {
+        const alpha = (i + 1) / c.glyphs.length;
+        mctx.fillStyle = `rgba(0,255,65,${alpha * 0.45})`;
+        mctx.fillText(c.glyphs[i].g, c.x, c.glyphs[i].y);
+      }
+    }
+
+    if (Math.random() < 0.02) spawnMorseColumn(Math.random() * w);
+
+    for (let i = morseColumns.length - 1; i >= 0; i--) {
+      const m = morseColumns[i];
+      const ch = m.seq[m.idx % m.seq.length];
+      if (ch !== " ") {
+        mctx.fillStyle = "rgba(0,255,95,0.55)";
+        mctx.fillText(ch, m.x, m.y);
+      }
+      m.y += m.speed;
+      m.life++;
+      if (m.life % 3 === 0) m.idx++;
+      if (m.y > h + 40) morseColumns.splice(i, 1);
+    }
+
+    requestAnimationFrame(drawMatrix);
+  }
+
+  /* ---------- Audio click ---------- */
+  const clickAudio = document.getElementById("click-audio");
+  let audioCtx = null;
+
+  function playClickOscillator() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(920, t);
+      g.gain.setValueAtTime(0.012, t);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + 0.038);
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.045);
+    } catch (_) {}
+  }
+
+  function playClick() {
+    try {
+      clickAudio.volume = 0.22;
+      clickAudio.currentTime = 0;
+      const p = clickAudio.play();
+      if (p !== undefined && typeof p.then === "function") {
+        p.catch(playClickOscillator);
+        return;
+      }
+      return;
+    } catch (_) {}
+    playClickOscillator();
+  }
+
+  /* ---------- Terminal ---------- */
+  const output = document.getElementById("output");
+  const input = document.getElementById("cmd-input");
+  const cmdGhost = document.getElementById("cmd-ghost");
+  const promptText = document.getElementById("prompt-text");
+
+  function syncGhost() {
+    cmdGhost.textContent = input.value || "";
+  }
+
+  function appendHtml(html) {
+    const wrap = document.createElement("div");
+    wrap.className = "line";
+    wrap.innerHTML = html;
+    output.appendChild(wrap);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function appendPre(text) {
+    const pre = document.createElement("pre");
+    pre.className = "line";
+    pre.style.margin = "0.35em 0";
+    pre.style.whiteSpace = "pre";
+    pre.style.fontFamily = "inherit";
+    pre.textContent = text;
+    output.appendChild(pre);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function stardateFromNow() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const start = new Date(year, 0, 1);
+    const frac = (d - start) / (86400000 * 365.2425);
+    const base = (year - 2323) * 1000 + frac * 1000;
+    return base.toFixed(3);
+  }
+
+  const NEOFETCH = `
+[2m      ╭──────────╮[0m
+[2m    ╱ ◈════════ ◈  ╲[0m    ${OPERATOR}@et-supercluster
+[2m   │  ▓▓▓ ░░░ ▓▓▓   │[0m   ──────────────────────
+[2m   │ ╭────────────╮ │[0m   OS: ET-OS (Extraterrestrial Node)
+[2m   │ │ ⊗  CORE ⊗ │  │[0m   Host: Deep Space Relay 9
+[2m   │ ╰────────────╯ │[0m   Kernel: Linux 6.6.8-arch1-1
+[2m    ╲ ░░░░░░░░░░░  ╱[0m    Shell: deepspace-bash
+[2m      ╰──────────╯[0m      Uptime: 13.7 billion years
+[2m       ⌬ ${OPERATOR} ⌬[0m       Theme: Monochrome Phosphor [CLEAR]
+`.replace(/\x1b\[[0-9;]*m/g, "");
+
+  const ABOUT_ART = `
+═══════════════════════════════════════════════════════════════════
+              FATHERS OF AI — ARCHIVE FRAGMENT 0x7F
+═══════════════════════════════════════════════════════════════════
+
+    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+    │   .---.     │      │    ████     │      │   ╭───╮     │
+    │   |o o|     │      │   ██  ██    │      │   │ ▓ │     │
+    │   | > |     │      │   ██  ██    │      │   ╰───╯     │
+    │   \\_=_/     │      │    ████     │      │  ╱    ╲    │
+    └─────────────┘      └─────────────┘      └─────────────┘
+     LINUS TORVALDS       JOHN VON NEUMANN       ALAN TURING
+
+  LINUS TORVALDS
+    "The architect of the open-source world-kernel."
+
+  JOHN VON NEUMANN
+    "The ghost in the machine's architecture."
+
+  ALAN TURING
+    "The codebreaker who taught machines to dream."
+
+  ── SYSTEM NOTE ───────────────────────────────────────────────────
+  Exhibiting a major malfunction.
+═══════════════════════════════════════════════════════════════════
+`;
+
+  const SERVICES_TEXT = `
+╔═══════════════════════════════════════════════════════════════════╗
+║  SERVICE MANIFEST // G4M31N0 — LINUX & PYTHON OPERATIONS          ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  LINUX                                                            ║
+║    · Server & workstation administration (systemd, networking,    ║
+║      storage, permissions, hardening)                             ║
+║    · Troubleshooting: performance, boot, kernel, containers       ║
+║    · Automation: bash, cron, CI runners, reproducible configs     ║
+║    · Distributions: Arch, Debian/Ubuntu, RHEL-family familiarity    ║
+║                                                                   ║
+║  PYTHON                                                           ║
+║    · CLI tools, internal APIs, glue & ETL-style pipelines          ║
+║    · Packaging, tests, typing, refactors of legacy scripts        ║
+║    · Stdlib-first; libraries when they earn their keep              ║
+║                                                                   ║
+║  ENGAGEMENT                                                       ║
+║    · Scoped audits, implementation sprints, ongoing support blocks   ║
+╚═══════════════════════════════════════════════════════════════════╝
+`.trimEnd();
+
+  const REVIEWS_TEXT = `
+┌───────────────────────────────────────────────────────────────────┐
+│ ARCHIVE: CLIENT SIGNAL LOGS (VERIFIED DELIVERABLES)               │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ REVIEW 0x01 ─────────────────────────────────────────────────────┐
+│ Dr. Elena Vasquez                                                 │
+│ Principal Site Reliability Engineer — hyperscale cloud provider   │
+│                                                                   │
+│ "Contracted for a production automation and observability sweep    │
+│  across a bare-metal estate. The Linux internals depth and clear   │
+│  runbooks were what I expect from a staff-level IC, not a         │
+│  short engagement. Ship again without hesitation."                │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ REVIEW 0x02 ─────────────────────────────────────────────────────┐
+│ Marcus Chen                                                       │
+│ Staff Software Engineer (Python) — data platform org              │
+│                                                                   │
+│ "Inherited a brittle ingestion path; he rewrote it into clean,   │
+│  testable Python with explicit error semantics. Communication and  │
+│  code review discipline matched our senior bar."                    │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ REVIEW 0x03 ─────────────────────────────────────────────────────┐
+│ Sofia Larson                                                      │
+│ Head of Platform Infrastructure — fintech infrastructure          │
+│                                                                   │
+│ "Brought in under incident pressure for kernel and I/O behaviour  │
+│  on a batch-critical cluster. Root-cause narrative and mitigation  │
+│  were precise; we recovered capacity inside one maintenance."     │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ REVIEW 0x04 ─────────────────────────────────────────────────────┐
+│ James Whitfield                                                   │
+│ Former CTO — Series B financial infrastructure                      │
+│                                                                   │
+│ "Linux baseline work plus Python tooling removed weeks of manual  │
+│  toil from the platform team. Delivers substance: configs,        │
+│  tests, and documentation—not slideware."                         │
+└───────────────────────────────────────────────────────────────────┘
+`.trimEnd();
+
+  const COMMANDS = [
+    "help", "clear", "whoami", "date", "neofetch", "scan", "about",
+    "services", "contact", "reviews"
+  ];
+
+  function printHelp() {
+    appendPre(`Available commands:
+  ${COMMANDS.join(", ")}
+
+Type a command and press Enter. Operator: ${OPERATOR}.`);
+  }
+
+  function printContact() {
+    appendPre(`
+╔═══════════════════════════════════════════════════════════════════╗
+║  OUTBOUND RELAY // CONTACT G4M31N0                                ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Operator:  Benjamin (${OPERATOR})                                ║
+║  Discipline: Linux systems · Python engineering                   ║
+║                                                                   ║
+║  Include in your first message:                                   ║
+║    · Goal (e.g. migrate, automate, debug, build)                  ║
+║    · Stack / distro / Python version if known                     ║
+║    · Timeline & whether production is in scope                    ║
+╚═══════════════════════════════════════════════════════════════════╝
+`.trimEnd());
+    const subjectPlain = `[${OPERATOR}] Linux / Python — project inquiry`;
+    const bodyPlain =
+      `Hello Benjamin,\n\nProject summary:\n\nCurrent stack:\n\nTimeline:\n\n— `;
+    const subj = encodeURIComponent(subjectPlain);
+    const body = encodeURIComponent(bodyPlain);
+    const mailtoGmail =
+      "mailto:" + encodeURIComponent(CONTACT_GMAIL) + "?subject=" + subj + "&body=" + body;
+    const mailtoProton =
+      "mailto:" + encodeURIComponent(CONTACT_PROTON) + "?subject=" + subj + "&body=" + body;
+    const gmailHref =
+      "https://mail.google.com/mail/?view=cm&fs=1&to=" +
+      encodeURIComponent(CONTACT_GMAIL) +
+      "&su=" +
+      subj +
+      "&body=" +
+      body;
+    appendHtml(
+      `<span class="dim">Gmail (preferred):</span> ` +
+        `<a class="terminal-link" href="${escapeHtml(mailtoGmail)}">${escapeHtml(CONTACT_GMAIL)}</a>` +
+        `<span class="dim"> — opens your default mail app with a draft.</span><br/>` +
+        `<a class="terminal-btn" href="${escapeHtml(gmailHref)}" target="_blank" rel="noopener noreferrer">Open Gmail to compose</a>` +
+        `<span class="dim"> — opens Gmail in the browser; on phones often hands off to the Gmail app with To / subject / body filled.</span>`
+    );
+    appendHtml(
+      `<span class="dim">Proton (alternate):</span> ` +
+        `<a class="terminal-link" href="${escapeHtml(mailtoProton)}">${escapeHtml(CONTACT_PROTON)}</a>`
+    );
+  }
+
+  let scanTimer = null;
+
+  function runScan() {
+    if (scanTimer) clearInterval(scanTimer);
+    const steps = [
+      { label: "Scanning subspace", ok: true },
+      { label: "Analyzing planetary cores", warn: "Major Malfunction detected in Sector 7G" },
+      { label: "Running diagnostic on AI cores", ok: true },
+      { label: "Mapping exotic particle drift", ok: true },
+      { label: "Correlating tachyon echoes", ok: true },
+      { label: `Handshake with Operator ${OPERATOR}`, ok: true }
+    ];
+    let si = 0;
+    let tickInStep = 0;
+    function bar(p) {
+      const w = 24;
+      const f = Math.round((p / 100) * w);
+      return "[" + "#".repeat(f) + ".".repeat(Math.max(0, w - f)) + "]";
+    }
+    scanTimer = setInterval(() => {
+      if (si >= steps.length) {
+        clearInterval(scanTimer);
+        scanTimer = null;
+        appendHtml('<span class="dim">Scan cycle complete. Standby.</span>');
+        return;
+      }
+      const s = steps[si];
+      const base = Math.min(92, (si + 1) * 14 + tickInStep * 22);
+      const pct = Math.min(100, base + Math.floor(Math.random() * 18));
+      let status;
+      if (s.warn) status = `<span class="warn">[WARNING: ${s.warn}]</span>`;
+      else status = `<span class="dim">[OK]</span>`;
+      appendHtml(`<span class="scan-bar">${s.label}... ${bar(pct)} ${pct}% ${status}</span>`);
+      tickInStep++;
+      if (tickInStep >= 4) {
+        tickInStep = 0;
+        si++;
+      }
+    }, 140);
+  }
+
+  function dispatch(cmdRaw) {
+    const cmd = cmdRaw.trim();
+    const parts = cmd.split(/\s+/);
+    const base = parts[0] ? parts[0].toLowerCase() : "";
+
+    if (!cmd) return;
+
+    appendHtml(`<span class="dim">${promptText.textContent}</span> ${escapeHtml(cmdRaw)}`);
+
+    if (base === "help") printHelp();
+    else if (base === "clear") {
+      output.innerHTML = "";
+    } else if (base === "whoami") {
+      appendPre("guest@et-supercluster:~$");
+    } else if (base === "date") {
+      appendPre("Stardate " + stardateFromNow());
+    } else if (base === "neofetch") {
+      appendPre(NEOFETCH.trimEnd());
+    } else if (base === "scan") {
+      appendPre("[INIT] Extraterrestrial diagnostics...");
+      runScan();
+    } else if (base === "about") {
+      appendPre(ABOUT_ART.trimEnd());
+    } else if (base === "services") {
+      appendPre(SERVICES_TEXT);
+    } else if (base === "contact") {
+      printContact();
+    } else if (base === "reviews") {
+      appendPre(REVIEWS_TEXT);
+    } else {
+      appendPre(`bash: ${cmdRaw}: command not found. Sense of humor module failed to load.`);
+    }
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  let bootDone = false;
+
+  function bootSequence() {
+    input.readOnly = true;
+    syncGhost();
+    appendPre(NEOFETCH.trimEnd());
+    const welcome = "Connection established. We are the future. Awaiting command from high-intelligence entity...";
+    const para = document.createElement("div");
+    para.className = "line";
+    para.style.marginTop = "0.75em";
+    output.appendChild(para);
+
+    let idx = 0;
+    function tick() {
+      if (idx >= welcome.length) {
+        bootDone = true;
+        input.readOnly = false;
+        input.focus();
+        return;
+      }
+      para.textContent += welcome[idx];
+      playClick();
+      idx++;
+      output.scrollTop = output.scrollHeight;
+      setTimeout(tick, 38 + Math.random() * 28);
+    }
+    tick();
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Tab")
+      playClick();
+    if (e.key === "Enter") {
+      const v = input.value;
+      input.value = "";
+      if (bootDone) dispatch(v);
+      e.preventDefault();
+    }
+  });
+
+  input.addEventListener("input", syncGhost);
+  input.addEventListener("keyup", syncGhost);
+
+  window.addEventListener("resize", () => {
+    resizeGlobe();
+    resizeMatrix();
+  });
+
+  resizeGlobe();
+  resizeMatrix();
+  drawGlobe();
+  drawMatrix();
+  bootSequence();
+  input.focus();
+
+  window.addEventListener(
+    "pointerdown",
+    () => {
+      try {
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      } catch (_) {}
+    },
+    { passive: true }
+  );
+
+  document.getElementById("crt-wrap").addEventListener("click", () => {
+    if (bootDone) input.focus();
+  });
+})();
+  </script>
+</body>
+</html>
