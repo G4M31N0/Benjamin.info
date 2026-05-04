@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "myhub: Server + Chrome (use this)",
+      "preLaunchTask": "myhub: serve 8080",
+      "url": "http://127.0.0.1:8080/",
+      "webRoot": "${workspaceFolder}",
+      "runtimeExecutable": "/usr/bin/google-chrome-stable",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile",
+      "runtimeArgs": ["--disable-extensions"]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "myhub: Chrome only (server already running)",
+      "url": "http://127.0.0.1:8080/",
+      "webRoot": "${workspaceFolder}",
+      "runtimeExecutable": "/usr/bin/google-chrome-stable",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile",
+      "runtimeArgs": ["--disable-extensions"]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "myhub: Open index.html (file://)",
+      "url": "file://${workspaceFolder}/index.html",
+      "webRoot": "${workspaceFolder}",
+      "runtimeExecutable": "/usr/bin/google-chrome-stable",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile",
+      "runtimeArgs": ["--disable-extensions"]
+    }
+  ]
+}
